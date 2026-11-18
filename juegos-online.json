@@ -1,0 +1,44 @@
+[
+  {
+    "id": "ejemplo-cable",
+    "nombre": "Juego de GBA con cable link",
+    "origen": "GBA/mi-juego.gba",
+    "rom": "ejemplo-cable.gba",
+    "modo": "cable",
+    "salas": 2,
+    "consolas": [2, 3, 4],
+    "partida_bytes": 131072,
+    "descripcion": "Cada jugador con su consola, unidas por el cable link.",
+    "ayuda": "Elegid el modo multijugador del propio juego."
+  },
+  {
+    "id": "ejemplo-compartida",
+    "nombre": "Juego de GBA para dos en una consola",
+    "origen": "GBA/otro-juego.gba",
+    "rom": "ejemplo-compartida.gba",
+    "modo": "compartida",
+    "salas": 1,
+    "jugadores": 2,
+    "descripcion": "Una sola consola que ven los dos; las teclas de los dos llegan a ella.",
+    "ayuda": "Lo que pulséis cualquiera de los dos llega a la consola."
+  },
+  {
+    "id": "ejemplo-n64",
+    "nombre": "Juego de N64 de un jugador",
+    "sistema": "n64",
+    "origen": "N64/juego.z64",
+    "rom": "ejemplo-n64.z64",
+    "binario": "lrlink",
+    "nucleo": "parallel_n64_libretro.so",
+    "opciones": "parallel-n64-gfxplugin=angrylion;parallel-n64-angrylion-multithread=3;parallel-n64-angrylion-vioverlay=Unfiltered",
+    "modo": "cable",
+    "salas": 1,
+    "consolas": [1],
+    "peso": 4,
+    "partida_bytes": 131072,
+    "video": { "ancho": 640, "alto": 480, "fps": 50 },
+    "audio_hz": 22050,
+    "descripcion": "La consola corre en el servidor con dibujo exacto (angrylion).",
+    "ayuda": "Stick: flechas."
+  }
+]

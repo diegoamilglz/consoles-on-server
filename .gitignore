@@ -1,0 +1,18 @@
+# Nada de juegos, BIOS ni partidas en el repositorio
+*.gba
+*.GBA
+*.gb
+*.gbc
+*.n64
+*.z64
+*.v64
+*.sav
+*.sav.anterior
+*.st
+roms/
+# Lo que se compila
+gbalink
+gbalink-fs
+lrlink
+*.so
+__pycache__/

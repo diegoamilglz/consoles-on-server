@@ -1,0 +1,35 @@
+# Servicio de las consolas en el servidor (lo instala instalar.sh)
+[Unit]
+Description=Juegos online (consolas en el servidor, imagen al navegador)
+After=network.target
+
+[Service]
+# Usuario propio, sin contrasena ni shell, que no puede usar sudo
+User=gbalink
+Group=gbalink
+Environment=HOME=/var/lib/gba-link
+WorkingDirectory=/var/lib/gba-link
+# Los juegos están en /opt/gba-link/juegos-online.json, y sus ROMs en /var/lib/gba-link (las copia instalar.sh)
+ExecStart=/usr/bin/python3 -u /opt/gba-link/servidor.py --roms /var/lib/gba-link --datos /var/lib/gba-link/partidas --puerto 9081
+Restart=on-failure
+RestartSec=5
+
+# Unica carpeta donde puede escribir: /var/lib/gba-link (ROM y partidas)
+StateDirectory=gba-link
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+
+# No puede ganar permisos
+NoNewPrivileges=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+
+# Red: solo hablar con Apache por loopback, sin poder salir a internet
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Juegos online</title>
+<link rel="stylesheet" href="retro.css">
+<style>
+  /* Toda la página es una ventana de XP: barra de título, herramientas, la pantalla y la barra de opciones */
+  * { -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body { display:flex; flex-direction:column; background:#000; }
+  .ventana.principal { flex:1; min-height:0; display:flex; flex-direction:column; border-radius:0; box-shadow:none; }
+  .ventana.principal > .titulo { border-radius:0; }
+  .herramientas label { display:flex; align-items:center; gap:6px; }
+  #estado { margin-left:auto; padding:1px 8px; font-size:12px; color:var(--suave); font-variant-numeric:tabular-nums;
+            background:#fff; border:1px solid; border-color:#a7a291 #fff #fff #a7a291; }
+  main { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:6px 8px; position:relative; background:#111 radial-gradient(ellipse at center, #1d2a4a, #0b0f1c 70%); }
+  canvas { width:100%; height:100%; max-width:calc((100vh - 150px) * 1.5); object-fit:contain; image-rendering:pixelated; background:#000;
+           border:3px solid #2b2b2b; border-radius:4px; box-shadow:0 0 0 2px #5a5a5a, 0 6px 18px rgba(0,0,0,.6); }
+  .capa { position:absolute; inset:0; display:flex; flex-direction:column; gap:12px; align-items:center; justify-content:center; background:rgba(5,10,30,.72); text-align:center; padding:16px; }
+  #entrar .dialogo { max-width:560px; text-align:left; }
+  #entrar .boton.verde { font-size:16px; padding:8px 26px; min-height:36px; }
+  #pausada { display:none; pointer-events:none; }
+  #pausada .dialogo { font-size:18px; padding:10px 28px; }
+  #salas { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  /* Solo informan: como campos de la barra de estado de XP (hundidos), para que no parezcan botones */
+  .tarjetaSala { min-width:170px; padding:4px 10px; text-align:left; cursor:default; user-select:none;
+                 background:var(--beige); color:var(--texto); border:1px solid; border-color:#a7a291 #fff #fff #a7a291; }
+  .tarjetaSala b { display:flex; align-items:center; gap:7px; font-size:13px; }
+  .tarjetaSala b::before { content:""; width:8px; height:8px; border-radius:50%; background:#9a968a; }
+  .tarjetaSala.encendida b::before { background:#2fbf4a; box-shadow:0 0 4px #2fbf4a; }
+  .tarjetaSala span { color:var(--suave); font-size:12px; }
+  .tarjetaSala.elegida { outline:2px solid var(--naranja); outline-offset:1px; }
+  #aviso { color:#ffd27a; max-width:520px; font-weight:bold; }
+  #aviso:empty { display:none; }
+  /* Elegir partida: una fila por partida, que se puede pulsar */
+  .lista-partidas { display:flex; flex-direction:column; gap:6px; max-height:50vh; overflow:auto; }
+  .lista-partidas button { display:flex; flex-direction:column; align-items:flex-start; text-align:left; padding:6px 10px; }
+  .lista-partidas button b { font-size:14px; }
+  .lista-partidas button span { font-size:12px; color:var(--suave); }
+  /* Los botones táctiles son de la GBA */
+  #tactil.oculto-n64 { display:none !important; }
+
+  /* Barra de opciones, al estilo de la de EmulatorJS */
+  #barra { justify-content:center; gap:4px; border-top:1px solid #c8c3b0; border-bottom:0; }
+  #barra button { padding:3px 8px; }
+  #barra svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  #barra .sep { width:1px; height:22px; background:#b9b4a3; box-shadow:1px 0 0 #fff; margin:0 4px; }
+  .grupo { display:flex; }
+  .grupo button { border-radius:0; margin-left:-1px; }
+  .grupo button:first-child { border-radius:3px 0 0 3px; margin-left:0; }
+  .grupo button:last-child { border-radius:0 3px 3px 0; }
+  .grupo button.activo { position:relative; z-index:1; }
+  #volumen { width:80px; accent-color:var(--seleccion); }
+  .etiqueta-boton { font-size:12px; }
+  @media (max-width: 640px) { .etiqueta-boton { display:none; } }
+
+  /* Los diálogos son ventanas de XP */
+  dialog.ventana { padding:0; border-top:0; max-width:min(540px, calc(100vw - 24px)); max-height:calc(100vh - 24px); color:var(--texto); }
+  dialog.ventana > .cuerpo { overflow:auto; max-height:calc(100vh - 70px); }
+  dialog::backdrop { background:rgba(0,0,30,.45); }
+  dialog h3 { margin:12px 0 4px; font:bold 12px var(--letra-titulo); color:#1b4fb5; }
+  dialog table { border-collapse:collapse; width:100%; background:#fff; border:1px solid var(--campo-borde); }
+  dialog td { padding:2px 8px; font-size:13px; }
+  dialog tr:nth-child(even) td { background:#f2f5fb; }
+  dialog td:first-child { color:var(--suave); }
+  dialog .botones { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
+  #controles td button { min-width:120px; }
+  #controles td button.esperando { border-color:var(--naranja); background:#fff4dc; }
+  .nota { color:var(--suave); font-size:12px; margin:8px 0 0; }
+  #info td:last-child { font-variant-numeric:tabular-nums; }
+
+  #tactil { display:none; user-select:none; touch-action:none; padding:8px 12px 14px; justify-content:space-between; align-items:center; gap:8px; background:var(--beige); }
+  #tactil button { min-width:52px; min-height:52px; padding:0; touch-action:none; font-size:16px; }
+  .cruz { display:grid; grid-template-columns:repeat(3,52px); grid-template-rows:repeat(3,52px); gap:2px; }
+  .centro { display:flex; flex-direction:column; gap:8px; }
+  .centro button { min-height:30px !important; font-size:12px !important; }
+  .ab { display:flex; gap:10px; align-items:center; }
+  .ab button { border-radius:50% !important; font-weight:bold; color:#fff !important; text-shadow:1px 1px 0 rgba(0,0,0,.4);
+               background:radial-gradient(circle at 35% 30%, #ff8a8a, #c8102e 70%) !important; border-color:#7a0a1c !important; }
+  @media (pointer: coarse) { #tactil { display:flex; } }
+</style>
+</head>
+<body class="xp">
+<div class="ventana principal">
+  <div class="titulo">
+    <span class="pokeball icono-ventana"></span>
+    <span class="texto-titulo" id="titulo">Juegos online</span>
+    <span class="botones-titulo"><a class="cerrar" href="../" title="Volver a Juegos" aria-label="Volver a Juegos">✕</a></span>
+  </div>
+  <div class="herramientas">
+    <a class="boton" href="../">← Juegos</a>
+    <select id="juego" title="Juego"></select>
+    <select id="sala" title="Sala"></select>
+    <select id="consolas" title="Consolas de la sala (lo elige quien la enciende)"></select>
+    <label>Soy el <select id="jugador"></select></label>
+    <span id="estado">Sin conectar</span>
+  </div>
+  <main>
+    <canvas id="pantalla" width="480" height="320"></canvas>
+    <div id="pausada" class="capa"><div class="dialogo">En pausa</div></div>
+    <div id="entrar" class="capa">
+      <div id="salas"></div>
+      <div class="dialogo sigue">
+        <p id="eleccion">Elige arriba el juego, la sala, cuántos vais a jugar y tu puesto, y pulsa entrar.</p>
+        <p id="ayuda"></p>
+        <p>Guarda dentro del juego antes de salir: un minuto después de que se vaya el último, las consolas se apagan y lo no guardado se pierde.</p>
+      </div>
+      <div id="aviso"></div>
+      <button id="boton" class="boton verde">▶ Entrar a jugar</button>
+    </div>
+  </main>
+
+  <div id="barra" class="herramientas">
+    <button id="bPausa" title="Pausa (para todos)" disabled>
+      <svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg><span class="etiqueta-boton">Pausa</span>
+    </button>
+    <button id="bReiniciar" title="Apagar las consolas de la sala para volver a empezar (para todos)" disabled>
+      <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg><span class="etiqueta-boton">Reiniciar</span>
+    </button>
+    <div class="grupo" id="velocidades" title="Velocidad del juego (para todos)">
+      <button data-v="1" class="activo" disabled>x1</button><button data-v="1.5" disabled>x1,5</button><button data-v="2" disabled>x2</button>
+    </div>
+    <span class="sep"></span>
+    <button id="bSonido" title="Silenciar">
+      <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path id="ondas" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>
+    </button>
+    <input id="volumen" type="range" min="0" max="1" step="0.05" value="1" title="Volumen">
+    <span class="sep"></span>
+    <button id="bControles" title="Teclas y mando">
+      <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="5"/><path d="M7 10v4M5 12h4"/><circle cx="16" cy="11" r=".6"/><circle cx="18" cy="13" r=".6"/></svg><span class="etiqueta-boton">Controles</span>
+    </button>
+    <button id="bPartida" title="Descargar o subir la partida guardada">
+      <svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg><span class="etiqueta-boton">Partida</span>
+    </button>
+    <button id="bCaptura" title="Captura de pantalla" disabled>
+      <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+    </button>
+    <button id="bInfo" title="Información">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg><span class="etiqueta-boton">Info</span>
+    </button>
+    <button id="bCompleta" title="Pantalla completa">
+      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+  </div>
+
+  <div id="tactil">
+    <div class="cruz">
+      <span></span><button data-k="6">▲</button><span></span>
+      <button data-k="5">◀</button><span></span><button data-k="4">▶</button>
+      <span></span><button data-k="7">▼</button><span></span>
+    </div>
+    <div class="centro">
+      <button data-k="9">L</button><button data-k="2">Select</button><button data-k="3">Start</button><button data-k="8">R</button>
+    </div>
+    <div class="ab"><button data-k="1">B</button><button data-k="0">A</button></div>
+  </div>
+</div>
+
+<dialog id="controles" class="ventana">
+  <div class="titulo"><span class="pokeball icono-ventana"></span><span class="texto-titulo">Teclas y mando</span>
+    <span class="botones-titulo"><button class="cerrar" data-cierra aria-label="Cerrar">✕</button></span></div>
+  <div class="cuerpo">
+    <table id="tablaControles"></table>
+    <p class="nota">Pulsa un botón de la tabla y luego la tecla o el botón del mando que quieras. Escape cancela. El stick izquierdo siempre sirve de cruceta. Se guarda en este navegador.</p>
+    <div class="botones"><button id="restaurar">Restaurar</button><button id="cerrarControles">Aceptar</button></div>
+  </div>
+</dialog>
+
+<dialog id="partida" class="ventana">
+  <div class="titulo"><span class="pokeball icono-ventana"></span><span class="texto-titulo">Partida guardada</span>
+    <span class="botones-titulo"><button class="cerrar" data-cierra aria-label="Cerrar">✕</button></span></div>
+  <div class="cuerpo">
+    <p style="margin-top:0" id="textoPartida">Tu partida se guarda en este navegador (y una copia en el servidor) y te sigue a cualquier puesto. Ahora eres el <b id="puestoPartida">Jugador 1</b>.</p>
+    <div class="botones" style="justify-content:flex-start">
+      <a id="bajar" class="boton" href="partida?j=0" download>Descargar partida</a>
+      <button id="subir">Subir una partida…</button>
+      <button id="otraPartida">Usar otra partida…</button>
+    </div>
+    <p class="nota">Vale un .sav de mGBA, VisualBoyAdvance o EmulatorJS. Al subirla o cambiarla, tu consola se reinicia (lo no guardado se pierde) y la que había queda como copia en el servidor.</p>
+    <input id="fichero" type="file" accept=".sav,.srm" hidden>
+    <div class="botones"><button id="cerrarPartida">Cerrar</button></div>
+  </div>
+</dialog>
+
+<dialog id="elegir" class="ventana">
+  <div class="titulo"><span class="pokeball icono-ventana"></span><span class="texto-titulo">¿Con qué partida juegas?</span>
+    <span class="botones-titulo"><button class="cerrar" data-cierra aria-label="Cerrar">✕</button></span></div>
+  <div class="cuerpo">
+    <p style="margin-top:0" id="textoElegir">Este navegador aún no tiene partida de este juego. Elige la tuya: desde ahora se guardará aquí y te seguirá a cualquier puesto.</p>
+    <div id="listaPartidas" class="lista-partidas"></div>
+    <div class="botones"><button id="cancelarElegir">Cancelar</button></div>
+  </div>
+</dialog>
+
+<dialog id="info" class="ventana">
+  <div class="titulo"><span class="pokeball icono-ventana"></span><span class="texto-titulo">Información</span>
+    <span class="botones-titulo"><button class="cerrar" data-cierra aria-label="Cerrar">✕</button></span></div>
+  <div class="cuerpo">
+    <h3 style="margin-top:0">Sala</h3>
+    <table><tbody id="infoSala"></tbody></table>
+    <h3>Emulador</h3>
+    <table><tbody id="infoEmulador"></tbody></table>
+    <h3>Conexión</h3>
+    <table><tbody id="infoConexion"></tbody></table>
+    <div class="botones"><a id="bajarRom" class="boton" href="rom" download>Descargar el juego</a><button id="cerrarInfo">Cerrar</button></div>
+  </div>
+</dialog>
+
+<script>
+const lienzo = document.getElementById('pantalla');
+const ctx = lienzo.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const estado = document.getElementById('estado');
+const selector = document.getElementById('jugador');
+const $ = id => document.getElementById(id);
+
+const selJuego = document.getElementById('juego');
+const selSala = document.getElementById('sala');
+const selConsolas = document.getElementById('consolas');
+const params = new URLSearchParams(location.search);
+
+// --- Juegos: la lista la da el servidor (juegos-online.json) ---
+// modo "cable": una consola por jugador, unidas por el cable link.
+// modo "compartida": una consola para todos, a la que llegan las teclas de todos.
+let juegos = [], juego = null;
+const compartida = () => juego && juego.modo === 'compartida';
+const esN64 = () => juego && juego.sistema === 'n64';
+function elegirJuego(id) {
+  juego = juegos.find(g => g.id === id) || juegos[0];
+  selJuego.value = juego.id;
+  const sistema = esN64() ? 'N64' : 'GBA';
+  const cabecera = juego.en_lista ? juego.nombre : `${sistema} online — ${juego.nombre}`;
+  document.title = cabecera;
+  $('titulo').textContent = cabecera
+    + (compartida() ? ' (consola compartida)' : esN64() ? ' (en el servidor)' : ' con cable link');
+  // Pantalla del tamaño del juego: 480x320 la GBA (doblada), 640x480 la N64
+  const [ancho, alto] = (juego.video && juego.video.salida) || [480, 320];
+  if (lienzo.width !== ancho || lienzo.height !== alto) { lienzo.width = ancho; lienzo.height = alto; }
+  lienzo.style.maxWidth = `calc((100vh - 150px) * ${ancho / alto})`;
+  lienzo.style.imageRendering = esN64() ? 'auto' : 'pixelated';
+  $('tactil').classList.toggle('oculto-n64', esN64());
+  cambiarSistema();
+  const salaAntes = selSala.value || params.get('sala') || '1';
+  selSala.innerHTML = '';
+  for (let k = 1; k <= juego.salas; k++) selSala.add(new Option(`Sala ${k}`, k));
+  selSala.value = Math.min(Number(salaAntes), juego.salas);
+  selSala.hidden = juego.salas < 2;
+  const consolasAntes = selConsolas.value || params.get('n');
+  selConsolas.innerHTML = '';
+  for (const n of juego.consolas || []) selConsolas.add(new Option(n === 1 ? '1 jugador' : `${n} jugadores`, n));
+  if ([...selConsolas.options].some(o => o.value === consolasAntes)) selConsolas.value = consolasAntes;
+  selConsolas.hidden = compartida();
+  $('otraPartida').hidden = compartida();  // la compartida tiene una sola partida, de todos
+  $('eleccion').textContent = compartida()
+    ? `Elige arriba tu puesto (hasta ${juego.jugadores} jugadores) y pulsa entrar.`
+    : (juego.consolas || []).length === 1 && juego.consolas[0] === 1
+    ? 'Pulsa entrar para jugar. La consola corre en el servidor y te llega su imagen.'
+    : `Elige arriba ${juego.salas > 1 ? 'la sala, ' : ''}cuántos vais a jugar y tu puesto, y pulsa entrar.`;
+  $('ayuda').textContent = juego.ayuda || '';
+  $('bajarRom').href = 'rom?juego=' + encodeURIComponent(juego.id);
+  $('textoPartida').firstChild.textContent = compartida()
+    ? 'La consola tiene una sola partida en el servidor, la misma para todos. Ahora eres el '
+    : 'Tu partida se guarda en este navegador (y una copia en el servidor) y te sigue a cualquier puesto. Ahora eres el ';
+  const u = new URL(location.href);
+  u.searchParams.set('juego', juego.id);
+  history.replaceState(null, '', u);
+  salas = [];
+  selector.innerHTML = '';
+  rehacerPuestos();
+  pintarSalas();
+}
+
+// --- Salas: cuántas consolas tiene cada una y quién está; se consulta cada pocos segundos ---
+let salas = [];
+function puestos() {
+  if (!juego) return 1;
+  if (compartida()) return juego.jugadores;
+  const s = salas[Number(selSala.value) - 1];
+  return s && s.activa ? s.puestos : Number(selConsolas.value);
+}
+function rehacerPuestos() {
+  const s = salas[Number(selSala.value) - 1];
+  const activa = s && s.activa;
+  if (activa && !compartida()) selConsolas.value = s.consolas;
+  selConsolas.disabled = !!activa;  // la sala encendida ya tiene sus consolas
+  const elegido = Math.min(Number(selector.value || params.get('j') || 0), puestos() - 1);
+  const nombres = [];
+  for (let j = 0; j < puestos(); j++) {
+    const ocupado = activa && s.conectados[j] > 0 && !conectadoA(s.sala, j);
+    nombres.push(`Jugador ${j + 1}${ocupado ? ' (ocupado)' : ''}`);
+  }
+  // Sin cambios, no tocar la lista: se cerraría si alguien la tiene abierta
+  if (nombres.join('|') === [...selector.options].map(o => o.text).join('|')) return;
+  selector.innerHTML = '';
+  nombres.forEach((t, j) => selector.add(new Option(t, j)));
+  selector.value = elegido;
+  actualizarPuesto();
+}
+function conectadoA(numSala, j) {
+  return ws && ws.readyState === 1 && Number(selSala.value) === numSala && Number(selector.value) === j;
+}
+function pintarSalas() {
+  const caja = $('salas');
+  caja.innerHTML = '';
+  for (const s of salas) {
+    const d = document.createElement('div');
+    d.className = 'tarjetaSala' + (s.sala === Number(selSala.value) ? ' elegida' : '') + (s.activa ? ' encendida' : '');
+    const t = document.createElement('b');
+    t.textContent = `Sala ${s.sala}`;
+    const e = document.createElement('span');
+    const dentro = s.conectados.reduce((a, b) => a + (b > 0 ? 1 : 0), 0);
+    e.textContent = s.activa ? `${s.puestos} jugadores · ${dentro} dentro` : 'libre';
+    d.append(t, e);
+    caja.appendChild(d);
+  }
+}
+async function consultarSalas() {
+  if (!juego) return;
+  try {
+    const r = await fetch('salas', { cache: 'no-store' });
+    salas = (await r.json()).juegos[juego.id] || [];
+  } catch (e) { return; }
+  rehacerPuestos();
+  pintarSalas();
+}
+async function cargarJuegos() {
+  try {
+    juegos = await (await fetch('juegos', { cache: 'no-store' })).json();
+  } catch (e) {
+    $('aviso').textContent = 'No se pudo cargar la lista de juegos. Recarga la página.';
+    return;
+  }
+  // Los de "en_lista" (de un jugador) no son de la sección Online: solo salen
+  // en el selector cuando se ha entrado a ese juego desde su tarjeta
+  const pedido = params.get('juego');
+  for (const g of juegos) {
+    if (!g.en_lista || g.id === pedido) selJuego.add(new Option(g.nombre, g.id));
+  }
+  elegirJuego(pedido);
+  consultarSalas();
+}
+cargarJuegos();
+setInterval(consultarSalas, 3000);
+
+// Preferencias de este navegador. Si el almacenamiento no está disponible, se usan las de serie
+function leerAjuste(nombre, porDefecto) {
+  try { const v = localStorage.getItem('gba-online.' + nombre); return v === null ? porDefecto : JSON.parse(v); }
+  catch (e) { return porDefecto; }
+}
+function guardarAjuste(nombre, valor) {
+  try { localStorage.setItem('gba-online.' + nombre, JSON.stringify(valor)); } catch (e) { /* sin almacenamiento */ }
+}
+
+// --- Partida de este navegador ---
+// Cada navegador tiene un identificador al azar (para su copia en el servidor) y guarda en IndexedDB
+// su partida de cada juego con cable. Al entrar la manda, y su consola la carga, sea cual sea el
+// puesto. Cuando el juego guarda, el servidor manda la nueva y se guarda aquí.
+let yo = leerAjuste('yo', null);
+if (!/^[0-9a-f]{16,32}$/.test(yo || '')) {
+  yo = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
+  guardarAjuste('yo', yo);
+}
+function abrirBD() {
+  return new Promise((ok, mal) => {
+    const p = indexedDB.open('gba-online', 1);
+    p.onupgradeneeded = () => p.result.createObjectStore('partidas');
+    p.onsuccess = () => ok(p.result);
+    p.onerror = () => mal(p.error);
+  });
+}
+async function leerPartida(id) {
+  try {
+    const bd = await abrirBD();
+    return await new Promise(ok => {
+      const p = bd.transaction('partidas').objectStore('partidas').get(id);
+      p.onsuccess = () => ok(p.result || null);
+      p.onerror = () => ok(null);
+    });
+  } catch (e) { return null; }
+}
+async function guardarPartida(id, datos) {  // datos: ArrayBuffer, o null para borrarla
+  try {
+    const bd = await abrirBD();
+    const almacen = bd.transaction('partidas', 'readwrite').objectStore('partidas');
+    if (datos) almacen.put({ datos, fecha: Date.now() }, id); else almacen.delete(id);
+  } catch (e) { console.warn('No se pudo guardar la partida en este navegador', e); }
+}
+let partidaLocal = null;   // { datos, fecha } de este juego, o null
+let primerMensaje = null;  // con qué partida se entra si este navegador no tiene ninguna: 'usar …', 'nueva' o 'copia'
+
+// Elegir partida: las que había en los puestos antes de que cada navegador tuviera la suya, la copia
+// del servidor de este navegador, o una nueva. Devuelve el mensaje para el servidor, o null si se cancela
+async function elegirPartida(texto) {
+  let lista;
+  try {
+    lista = await (await fetch(`partidas?juego=${juego.id}&yo=${yo}`, { cache: 'no-store' })).json();
+  } catch (e) { alert('No se pudo cargar la lista de partidas. Prueba otra vez.'); return null; }
+  $('textoElegir').textContent = texto;
+  const caja = $('listaPartidas');
+  caja.innerHTML = '';
+  return new Promise(ok => {
+    const opcion = (titulo, detalle, mensaje) => {
+      const b = document.createElement('button');
+      b.innerHTML = '<b></b><span></span>';
+      b.querySelector('b').textContent = titulo;
+      b.querySelector('span').textContent = detalle;
+      b.addEventListener('click', () => { ok(mensaje); $('elegir').close(); });
+      caja.appendChild(b);
+    };
+    if (lista.copia) opcion('Tu partida', 'la copia que guarda el servidor de este navegador', 'copia');
+    for (const p of lista.partidas) {
+      opcion(p.entrenador || `Partida del Jugador ${p.jugador}`,
+        `sala ${p.sala}, Jugador ${p.jugador} · guardada el ${p.fecha}` + (p.elegida ? ' · ya la eligió otro navegador' : ''),
+        'usar ' + p.archivo);
+    }
+    opcion('Partida nueva', 'empezar desde el principio', 'nueva');
+    const cancelar = () => { ok(null); };
+    $('elegir').addEventListener('close', cancelar, { once: true });
+    $('elegir').showModal();
+  });
+}
+$('cancelarElegir').addEventListener('click', () => $('elegir').close());
+
+let ws, decodificador, audio, ganancia, siguienteAudio = 0;
+let mascara = 0, mascaraEnviada = -1;
+let fotogramas = 0, bytes = 0, rtt = 0;
+let sala = { sala: 1, conectados: [], velocidad: 1, pausa: false, fps: [] };
+const medidas = { fps: 0, kbits: 0, saltadas: 0, cortes: 0 };
+
+// --- Vídeo: WebCodecs decodifica cada imagen en cuanto llega, sin búfer ---
+function crearDecodificador() {
+  if (!window.VideoDecoder) {
+    estado.textContent = 'Este navegador no tiene WebCodecs';
+    return null;
+  }
+  const d = new VideoDecoder({
+    output: f => { ctx.drawImage(f, 0, 0, lienzo.width, lienzo.height); f.close(); fotogramas++; },
+    error: e => { console.error(e); decodificador = crearDecodificador(); esperandoClave = true; },
+  });
+  // Baseline; la N64 (640x480 a 50) necesita el nivel 3.1
+  d.configure({ codec: esN64() ? 'avc1.42E01F' : 'avc1.42E01E', optimizeForLatency: true });
+  return d;
+}
+let esperandoClave = true;
+let marca = 0;
+
+function alVideo(buf) {
+  const clave = new Uint8Array(buf, 1, 1)[0] === 1;
+  if (esperandoClave && !clave) return;
+  esperandoClave = false;
+  if (!decodificador || decodificador.state !== 'configured') return;
+  if (decodificador.decodeQueueSize > 8) { esperandoClave = true; medidas.saltadas++; return; }
+  decodificador.decode(new EncodedVideoChunk({
+    type: clave ? 'key' : 'delta',
+    timestamp: (marca += 16742),
+    data: new Uint8Array(buf, 2),
+  }));
+}
+
+// --- Sonido: mono, 16 bits (16384 Hz la GBA, 22050 la N64), programado con un colchón que crece si hay cortes ---
+let colchon = 0.08;
+function alAudio(buf) {
+  if (!audio || buf.byteLength < 3) return;
+  const datos = new Int16Array(buf.slice(1));  // copia: el Int16Array necesita empezar en posición par
+  const b = audio.createBuffer(1, datos.length, (juego && juego.audio_hz) || 16384);
+  const canal = b.getChannelData(0);
+  for (let i = 0; i < datos.length; i++) canal[i] = datos[i] / 32768;
+  const s = audio.createBufferSource();
+  s.buffer = b;
+  s.connect(ganancia);
+  const ahora = audio.currentTime;
+  if (siguienteAudio < ahora) {
+    // Se ha quedado sin sonido (un chasquido): colchón algo mayor, hasta 200 ms
+    if (siguienteAudio) medidas.cortes++;
+    colchon = Math.min(0.2, colchon + 0.02);
+    siguienteAudio = ahora + colchon;
+  } else if (siguienteAudio > ahora + colchon + 0.25) {
+    siguienteAudio = ahora + colchon;  // demasiado retraso acumulado
+  }
+  s.start(siguienteAudio);
+  siguienteAudio += b.duration;
+}
+
+// --- Conexión ---
+function conectar() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const base = location.pathname.replace(/[^/]*$/, '');
+  if (ws) { ws.onclose = null; ws.close(); }
+  esperandoClave = true;
+  let rechazado = false;
+  ws = new WebSocket(`${proto}//${location.host}${base}ws?juego=${juego.id}&sala=${selSala.value}&j=${selector.value}&n=${selConsolas.value || 1}&yo=${yo}`);
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => {
+    // Lo primero: con qué partida se entra (en la compartida, la de la consola, que es de todos)
+    if (compartida()) ws.send('nada');
+    else if (partidaLocal) {
+      const datos = new Uint8Array(partidaLocal.datos);
+      const mensaje = new Uint8Array(4 + datos.length);
+      mensaje.set([77, 73, 65, 49]);  // "MIA1"
+      mensaje.set(datos, 4);
+      ws.send(mensaje.buffer);
+    } else ws.send(primerMensaje || 'nueva');
+    mascaraEnviada = -1; activarBarra(true); $('aviso').textContent = '';
+  };
+  ws.onclose = () => {
+    activarBarra(false);
+    if (rechazado) { estado.textContent = 'Sin conectar'; return; }
+    estado.textContent = 'Desconectado. Reintentando…';
+    setTimeout(() => { if (ws.readyState === 3) conectar(); }, 2000);
+  };
+  ws.onmessage = e => {
+    if (typeof e.data === 'string') {
+      if (e.data.startsWith('pong')) rtt = performance.now() - Number(e.data.slice(4));
+      else if (e.data.startsWith('estado')) alEstado(JSON.parse(e.data.slice(6)));
+      else if (e.data.startsWith('cerrada')) {
+        // Alguien ha reiniciado la sala: no reconectar solo, para poder elegir otra configuración
+        rechazado = true;
+        $('aviso').textContent = e.data.slice(7);
+        $('entrar').style.display = 'flex';
+        $('pausada').style.display = 'none';
+        consultarSalas();
+      }
+      else if (e.data.startsWith('error')) {
+        // El servidor no deja entrar (puesto que no existe en esa sala, o no queda CPU)
+        rechazado = true;
+        $('aviso').textContent = e.data.slice(5);
+        $('entrar').style.display = 'flex';
+        consultarSalas();
+      }
+      else if (e.data === 'sinpartida') {
+        // Partida nueva: la de este navegador se borra (queda la copia anterior en el servidor)
+        partidaLocal = null;
+        guardarPartida(juego.id, null);
+      }
+      else if (e.data.startsWith('partida')) alert(e.data[0].toUpperCase() + e.data.slice(1));
+      return;
+    }
+    bytes += e.data.byteLength;
+    const tipo = new Uint8Array(e.data, 0, 1)[0];
+    if (tipo === 1) alVideo(e.data);
+    else if (tipo === 2) alAudio(e.data);
+    else if (tipo === 3) {
+      // La partida de esta consola, al entrar o porque el juego acaba de guardar
+      partidaLocal = { datos: e.data.slice(1), fecha: Date.now() };
+      primerMensaje = null;
+      guardarPartida(juego.id, partidaLocal.datos);
+    }
+  };
+}
+
+function enviar(texto) { if (ws && ws.readyState === 1) ws.send(texto); }
+
+setInterval(() => {
+  enviar('ping' + performance.now());
+  medidas.fps = fotogramas;
+  medidas.kbits = Math.round(bytes * 8 / 1000);
+  if (ws && ws.readyState === 1) estado.textContent = `${fotogramas} fps · ${Math.round(rtt)} ms · ${medidas.kbits} kbit/s`;
+  fotogramas = 0; bytes = 0;
+  if ($('info').open) pintarInfo();
+}, 1000);
+
+// --- Estado de la sala (lo manda el servidor a todos): velocidad, pausa, quién está ---
+function alEstado(s) {
+  if (!juego || s.juego !== juego.id) return;
+  sala = s;
+  salas[s.sala - 1] = s;
+  rehacerPuestos();
+  document.querySelectorAll('#velocidades button').forEach(b => b.classList.toggle('activo', Number(b.dataset.v) === s.velocidad));
+  $('pausada').style.display = s.pausa ? 'flex' : 'none';
+  $('bPausa').classList.toggle('activo', s.pausa);
+  $('bPausa').querySelector('.etiqueta-boton').textContent = s.pausa ? 'Seguir' : 'Pausa';
+  if ($('info').open) pintarInfo();
+}
+
+function activarBarra(si) {
+  for (const b of [$('bPausa'), $('bReiniciar'), $('bCaptura'), ...document.querySelectorAll('#velocidades button')]) b.disabled = !si;
+}
+$('bReiniciar').addEventListener('click', () => {
+  const otros = sala.conectados.reduce((a, n) => a + n, 0) - 1;
+  if (!confirm(`Se apagan las consolas de la sala ${sala.sala} para todos${otros > 0 ? ` (hay ${otros} más dentro)` : ''} y lo no guardado se pierde. Luego podéis volver a entrar, incluso con otro número de jugadores. ¿Reiniciar?`)) return;
+  enviar('reiniciar');
+});
+$('bPausa').addEventListener('click', () => enviar(sala.pausa ? 'pausa 0' : 'pausa 1'));
+document.querySelectorAll('#velocidades button').forEach(b => b.addEventListener('click', () => enviar('vel ' + b.dataset.v)));
+
+// --- Sonido: volumen y silencio, guardados en este navegador ---
+let volumen = leerAjuste('volumen', 1), silencio = leerAjuste('silencio', false);
+$('volumen').value = volumen;
+function aplicarVolumen() {
+  if (ganancia) ganancia.gain.value = silencio ? 0 : volumen;
+  $('ondas').style.display = silencio || volumen === 0 ? 'none' : '';
+  $('bSonido').title = silencio ? 'Quitar silencio' : 'Silenciar';
+}
+$('volumen').addEventListener('input', e => { volumen = Number(e.target.value); silencio = false; guardarAjuste('volumen', volumen); guardarAjuste('silencio', false); aplicarVolumen(); });
+$('bSonido').addEventListener('click', () => { silencio = !silencio; guardarAjuste('silencio', silencio); aplicarVolumen(); });
+aplicarVolumen();
+
+// --- Controles: teclado y mando, editables ---
+const BOTONES_GBA = [  // bit de la GBA, nombre, tecla y botón de mando de serie (mando estándar del navegador)
+  [0, 'A', 'KeyX', [0]], [1, 'B', 'KeyZ', [1]], [9, 'L', 'KeyA', [4, 6]], [8, 'R', 'KeyS', [5, 7]],
+  [3, 'Start', 'Enter', [9]], [2, 'Select', 'Backspace', [8]],
+  [6, 'Arriba', 'ArrowUp', [12, 'e1-']], [7, 'Abajo', 'ArrowDown', [13, 'e1+']], [5, 'Izquierda', 'ArrowLeft', [14, 'e0-']], [4, 'Derecha', 'ArrowRight', [15, 'e0+']],
+  // Del emulador, no de la GBA: sin asignar de serie
+  ['vel', 'Velocidad (x1 → x1,5 → x2)', null, []],
+];
+// En el mando, un número es un botón y 'e<eje><signo>' es un eje del stick en una dirección
+// ('e1-' = eje 1 hacia el negativo = stick izquierdo hacia arriba, en el mando estándar).
+// N64: los bits son los de BUTTONS de mupen64plus. 16-19 no existen en la consola: son el stick.
+// Con un eje, el stick va analógico; con una tecla o un botón, a tope en esa dirección
+const BOTONES_N64 = [
+  [7, 'A', 'KeyX', [0]], [6, 'B', 'KeyZ', [2]], [5, 'Z', 'KeyC', [6]], [13, 'L', 'KeyQ', [4]], [12, 'R', 'KeyE', [5, 7]],
+  [4, 'Start', 'Enter', [9]],
+  [16, 'Stick ↑', 'ArrowUp', ['e1-']], [17, 'Stick ↓', 'ArrowDown', ['e1+']], [18, 'Stick ←', 'ArrowLeft', ['e0-']], [19, 'Stick →', 'ArrowRight', ['e0+']],
+  [11, 'C ↑', 'KeyI', [3, 'e3-']], [10, 'C ↓', 'KeyK', [1, 'e3+']], [9, 'C ←', 'KeyJ', ['e2-']], [8, 'C →', 'KeyL', ['e2+']],
+  [3, 'Cruceta ↑', 'KeyW', [12]], [2, 'Cruceta ↓', 'KeyS', [13]], [1, 'Cruceta ←', 'KeyA', [14]], [0, 'Cruceta →', 'KeyD', [15]],
+  ['vel', 'Velocidad (x1 → x1,5 → x2)', null, []],
+];
+let BOTONES = BOTONES_GBA;
+// Al cambiar de juego: los botones y las teclas guardadas de su sistema
+function cambiarSistema() {
+  const nuevos = esN64() ? BOTONES_N64 : BOTONES_GBA;
+  if (nuevos === BOTONES && controles) return;
+  BOTONES = nuevos;
+  controles = cargarControles();
+  mascara = 0;
+  rehacerMapa();
+}
+const claveControles = () => esN64() ? 'controles-n64' : 'controles';
+const VELOCIDADES = [1, 1.5, 2];
+function siguienteVelocidad() {
+  enviar('vel ' + VELOCIDADES[(VELOCIDADES.indexOf(sala.velocidad) + 1) % VELOCIDADES.length]);
+}
+function deSerie() {
+  const c = { teclado: {}, mando: {}, ejes: 1 };
+  for (const [bit, , tecla, mando] of BOTONES) { c.teclado[bit] = tecla; c.mando[bit] = mando; }
+  return c;
+}
+// Los controles guardados antes de poder asignar ejes no los tienen: se les añaden los de serie
+// una vez (salvo los ejes que ya use otra cosa)
+function cargarControles() {
+  const serie = deSerie();
+  const guardados = leerAjuste(claveControles(), {});
+  const c = Object.assign(deSerie(), guardados);
+  if (!guardados.ejes) {
+    const usados = new Set(Object.values(c.mando).flat());
+    for (const [bit, lista] of Object.entries(serie.mando)) {
+      const nuevos = lista.filter(v => typeof v === 'string' && !usados.has(v));
+      if (nuevos.length) c.mando[bit] = [...(c.mando[bit] || []), ...nuevos];
+    }
+    c.ejes = 1;
+  }
+  return c;
+}
+var controles = cargarControles();
+let mapaTeclas = {};
+function rehacerMapa() {
+  mapaTeclas = {};
+  for (const [bit, tecla] of Object.entries(controles.teclado)) if (tecla && bit !== 'vel') mapaTeclas[tecla] = Number(bit);
+}
+rehacerMapa();
+
+const FLECHAS = { ArrowUp: 'Flecha ↑', ArrowDown: 'Flecha ↓', ArrowLeft: 'Flecha ←', ArrowRight: 'Flecha →' };
+const nombreTecla = c => !c ? '—' : FLECHAS[c] || c.replace(/^Key/, '').replace(/^Digit/, '')
+  .replace('Backspace', 'Retroceso').replace('Enter', 'Intro').replace('Space', 'Espacio').replace('Shift', 'Mayús ');
+const EJES = { 'e0-': 'Stick izq. ←', 'e0+': 'Stick izq. →', 'e1-': 'Stick izq. ↑', 'e1+': 'Stick izq. ↓',
+  'e2-': 'Stick der. ←', 'e2+': 'Stick der. →', 'e3-': 'Stick der. ↑', 'e3+': 'Stick der. ↓' };
+const nombreMando = l => !l || !l.length ? '—' : l.map(i => typeof i === 'string'
+  ? EJES[i] || 'Eje ' + i.slice(1, -1) + ' ' + i.slice(-1) : 'Botón ' + i).join(' / ');
+
+let esperando = null;  // { tipo: 'teclado' | 'mando', bit, boton }
+function pintarControles() {
+  const t = $('tablaControles');
+  t.innerHTML = '<tr><td></td><td>Teclado</td><td>Mando</td></tr>';
+  for (const [bit, nombre] of BOTONES) {
+    if (bit === 'vel') t.insertRow().insertCell().textContent = 'Emulador';
+    const fila = t.insertRow();
+    fila.insertCell().textContent = nombre;
+    for (const tipo of ['teclado', 'mando']) {
+      const b = document.createElement('button');
+      b.textContent = tipo === 'teclado' ? nombreTecla(controles.teclado[bit]) : nombreMando(controles.mando[bit]);
+      b.addEventListener('click', () => {
+        if (esperando) esperando.boton.classList.remove('esperando');
+        // Para los ejes: dónde está cada uno ahora, para no confundir con un movimiento uno que ya
+        // estaba torcido (o un gatillo que en reposo marca -1)
+        const g = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(x => x);
+        esperando = { tipo, bit, boton: b, reposo: g ? [...g.axes] : [] };
+        b.classList.add('esperando');
+        b.textContent = tipo === 'teclado' ? 'Pulsa una tecla…' : 'Pulsa o mueve en el mando…';
+      });
+      fila.insertCell().appendChild(b);
+    }
+  }
+}
+function asignar(tipo, valor) {
+  const bit = esperando.bit;
+  if (tipo === 'teclado') {
+    // Una tecla solo puede hacer una cosa
+    for (const k in controles.teclado) if (controles.teclado[k] === valor) controles.teclado[k] = null;
+    controles.teclado[bit] = valor;
+  } else {
+    for (const k in controles.mando) controles.mando[k] = (controles.mando[k] || []).filter(i => i !== valor);
+    controles.mando[bit] = [valor];
+  }
+  esperando = null;
+  guardarAjuste(claveControles(), controles);
+  rehacerMapa();
+  pintarControles();
+}
+$('bControles').addEventListener('click', () => { pintarControles(); $('controles').showModal(); });
+$('cerrarControles').addEventListener('click', () => $('controles').close());
+$('restaurar').addEventListener('click', () => { controles = deSerie(); esperando = null; guardarAjuste(claveControles(), controles); rehacerMapa(); pintarControles(); });
+$('controles').addEventListener('close', () => { esperando = null; });
+
+// --- Teclas: se mandan solo cuando cambian ---
+function enviarTeclas() {
+  if (esN64()) {
+    // Botones (16 bits) y el stick: el del mando si está torcido, si no, el de las teclas (a tope)
+    const t = mascara;
+    let x = ((t >> 19) & 1) * 80 - ((t >> 18) & 1) * 80, y = ((t >> 16) & 1) * 80 - ((t >> 17) & 1) * 80;
+    if (stickMando.x || stickMando.y) { x = stickMando.x; y = stickMando.y; }
+    const botonesN64 = (mascara | mascaraMando) & 0x3FFF;
+    const clave = botonesN64 + ',' + x + ',' + y;
+    if (clave === mascaraEnviada || !ws || ws.readyState !== 1) return;
+    mascaraEnviada = clave;
+    const b = new DataView(new ArrayBuffer(4));
+    b.setUint16(0, botonesN64, true); b.setInt8(2, x); b.setInt8(3, y);
+    ws.send(b.buffer);
+    return;
+  }
+  const m = mascara | mascaraMando;
+  if (m === mascaraEnviada || !ws || ws.readyState !== 1) return;
+  mascaraEnviada = m;
+  ws.send(new Uint16Array([m]).buffer);
+}
+addEventListener('keydown', e => {
+  if (esperando && esperando.tipo === 'teclado') {
+    e.preventDefault();
+    if (e.code === 'Escape') { esperando = null; pintarControles(); return; }
+    asignar('teclado', e.code);
+    return;
+  }
+  if (document.querySelector('dialog[open]') || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  if (controles.teclado.vel && e.code === controles.teclado.vel) { if (!e.repeat) siguienteVelocidad(); e.preventDefault(); return; }
+  if (e.code in mapaTeclas) { mascara |= 1 << mapaTeclas[e.code]; enviarTeclas(); e.preventDefault(); }
+});
+addEventListener('keyup', e => { if (e.code in mapaTeclas) { mascara &= ~(1 << mapaTeclas[e.code]); enviarTeclas(); e.preventDefault(); } });
+addEventListener('blur', () => { mascara = 0; enviarTeclas(); });
+
+document.querySelectorAll('#tactil button').forEach(b => {
+  const bit = 1 << Number(b.dataset.k);
+  const on = e => { mascara |= bit; enviarTeclas(); e.preventDefault(); };
+  const off = e => { mascara &= ~bit; enviarTeclas(); e.preventDefault(); };
+  b.addEventListener('pointerdown', on);
+  b.addEventListener('pointerup', off);
+  b.addEventListener('pointerleave', off);
+  b.addEventListener('pointercancel', off);
+});
+
+// Mando del navegador. Mientras se edita un botón, el primero que se pulse se asigna
+let mascaraMando = 0, nombreDelMando = '', antes = new Set();
+let stickMando = { x: 0, y: 0 };  // N64: el stick izquierdo del mando, de -80 a 80
+function leerMando() {
+  let m = 0;
+  const ahora = new Set();
+  nombreDelMando = '';
+  let sx = 0, sy = 0, nuevoEje = null;
+  for (const g of navigator.getGamepads ? navigator.getGamepads() : []) {
+    if (!g) continue;
+    nombreDelMando = g.id;
+    g.buttons.forEach((b, i) => { if (b.pressed) ahora.add(i); });
+    // Cuánto marca una asignación, de 0 a 1: un botón, 0 o 1; un eje, lo torcido que esté hacia ese lado
+    const cuanto = v => {
+      if (typeof v === 'number') return g.buttons[v] && g.buttons[v].pressed ? 1 : 0;
+      const a = (g.axes[Number(v.slice(1, -1))] || 0) * (v.endsWith('-') ? -1 : 1);
+      return a < .15 ? 0 : Math.min(1, (a - .15) / .8);
+    };
+    const fuerza = bit => Math.max(0, ...(controles.mando[bit] || []).map(cuanto));
+    for (const [bit] of BOTONES) {
+      if (bit === 'vel' || bit >= 16) continue;
+      if (fuerza(bit) > .5) m |= 1 << bit;
+    }
+    if (esN64()) {
+      // El stick, analógico (con zona muerta): lo que marquen sus cuatro direcciones
+      const x = Math.round((fuerza(19) - fuerza(18)) * 80), y = Math.round((fuerza(16) - fuerza(17)) * 80);
+      if (Math.abs(x) > Math.abs(sx)) sx = x;
+      if (Math.abs(y) > Math.abs(sy)) sy = y;
+    }
+    // Para asignar un eje en Controles: el primero que se tuerza bastante desde donde estaba
+    if (esperando && esperando.tipo === 'mando' && nuevoEje === null) {
+      g.axes.forEach((a, i) => {
+        if (nuevoEje === null && Math.abs(a) > .6 && Math.abs(a - (esperando.reposo[i] || 0)) > .6) nuevoEje = 'e' + i + (a < 0 ? '-' : '+');
+      });
+    }
+  }
+  if (sx !== stickMando.x || sy !== stickMando.y) {
+    stickMando = document.querySelector('dialog[open]') ? { x: 0, y: 0 } : { x: sx, y: sy };
+    enviarTeclas();
+  }
+  if (esperando && esperando.tipo === 'mando') {
+    const nuevo = [...ahora].find(i => !antes.has(i));
+    if (nuevo !== undefined) asignar('mando', nuevo);
+    else if (nuevoEje !== null) asignar('mando', nuevoEje);
+    m = 0;
+  } else if (!document.querySelector('dialog[open]') && (controles.mando.vel || []).some(i => ahora.has(i) && !antes.has(i))) {
+    siguienteVelocidad();  // solo al pulsar, no mientras se mantiene
+  }
+  antes = ahora;
+  if (document.querySelector('dialog[open]')) m = 0;
+  if (m !== mascaraMando) { mascaraMando = m; enviarTeclas(); }
+  requestAnimationFrame(leerMando);
+}
+requestAnimationFrame(leerMando);
+
+// --- Partida: descargar y subir ---
+function actualizarPuesto() {
+  if (!juego) return;
+  $('bajar').href = `partida?juego=${juego.id}&sala=${selSala.value}&j=${selector.value || 0}`;
+  $('puestoPartida').textContent = `Jugador ${Number(selector.value) + 1}` + (juego.salas > 1 ? ` de la sala ${selSala.value}` : '');
+}
+actualizarPuesto();
+$('bPartida').addEventListener('click', () => $('partida').showModal());
+$('cerrarPartida').addEventListener('click', () => $('partida').close());
+const fichero = $('fichero');
+$('subir').addEventListener('click', () => {
+  if (!ws || ws.readyState !== 1) { alert('Entra a jugar primero.'); return; }
+  fichero.value = '';
+  fichero.click();
+});
+fichero.addEventListener('change', async () => {
+  const f = fichero.files[0];
+  if (!f) return;
+  if (f.size > 256 * 1024) { alert('Ese fichero es demasiado grande para ser una partida de GBA.'); return; }
+  const n = Number(selector.value) + 1;
+  const de = compartida() ? 'de la consola, para todos,' : `del Jugador ${n}`;
+  if (!confirm(`Se cargará "${f.name}" como partida ${de} y la consola se reiniciará: lo no guardado se pierde. La partida que había queda como copia en el servidor. ¿Seguir?`)) return;
+  const datos = new Uint8Array(await f.arrayBuffer());
+  const mensaje = new Uint8Array(4 + datos.length);
+  mensaje.set([83, 65, 86, 49]);  // "SAV1"
+  mensaje.set(datos, 4);
+  ws.send(mensaje.buffer);
+  $('partida').close();
+});
+$('otraPartida').addEventListener('click', async () => {
+  if (compartida()) { alert('En este juego la partida es la misma para todos.'); return; }
+  if (!ws || ws.readyState !== 1) { alert('Entra a jugar primero.'); return; }
+  $('partida').close();
+  const mensaje = await elegirPartida('Elige con qué partida quieres seguir. Tu consola se reiniciará y lo no guardado se perderá; '
+    + 'la partida que tenías queda como copia en el servidor.');
+  if (mensaje && ws && ws.readyState === 1) ws.send(mensaje);
+});
+
+// --- Captura y pantalla completa ---
+$('bCaptura').addEventListener('click', () => {
+  lienzo.toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `${juego.id}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+});
+$('bCompleta').addEventListener('click', () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+});
+
+// --- Información ---
+function filas(id, datos) {
+  $(id).innerHTML = '';
+  for (const [k, v] of datos) { const f = $(id).insertRow(); f.insertCell().textContent = k; f.insertCell().textContent = v; }
+}
+function pintarInfo() {
+  const conectado = ws && ws.readyState === 1;
+  const fps = sala.fps || [];
+  filas('infoSala', [
+    ['Sala', `${sala.sala}, con ${sala.conectados.length} jugadores`],
+    ...sala.conectados.map((n, i) => [`Jugador ${i + 1}`, (n ? (n > 1 ? `${n} conexiones` : 'conectado') : 'libre') + (i === Number(selector.value) ? ' (tú)' : '')]),
+    ['Velocidad', 'x' + String(sala.velocidad).replace('.', ',') + (sala.pausa ? ', en pausa' : '')],
+  ]);
+  filas('infoEmulador', [
+    ['Núcleo', esN64() ? 'parallel-n64 (angrylion), en el servidor' : 'mGBA, en el servidor'],
+    ['Juego', juego ? juego.nombre : '—'],
+    ['Consolas', fps.length ? fps.map(f => f.toFixed(1).replace('.', ',') + ' fps').join(' · ') : '—'],
+    compartida() ? ['Modo', 'una consola para todos']
+      : esN64() ? ['Modo', 'una consola, con el recompilador']
+      : ['Cable link', `${fps.length || sala.conectados.length} consolas unidas (lockstep)`],
+    ['Imagen', esN64() ? '640×480, enviada en H.264' : '240×160, enviada en H.264 a 480×320'],
+    ['Sonido', `16 bits, mono, ${((juego && juego.audio_hz) || 16384).toLocaleString('es-ES')} Hz`],
+  ]);
+  filas('infoConexion', [
+    ['Estado', conectado ? 'conectado' : 'sin conectar'],
+    ['Ping', conectado ? Math.round(rtt) + ' ms' : '—'],
+    ['Imágenes recibidas', medidas.fps + ' por segundo'],
+    ['Datos', medidas.kbits + ' kbit/s'],
+    ['Colchón de sonido', Math.round(colchon * 1000) + ' ms'],
+    ['Cortes de sonido', String(medidas.cortes)],
+    ['Imágenes saltadas', String(medidas.saltadas)],
+    ['Mando', nombreDelMando || 'ninguno'],
+  ]);
+}
+$('bInfo').addEventListener('click', () => { pintarInfo(); $('info').showModal(); });
+$('cerrarInfo').addEventListener('click', () => $('info').close());
+document.querySelectorAll('[data-cierra]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+
+// --- Entrar ---
+async function entrar() {
+  if (!juego) return;
+  // El sonido se crea ya, mientras dura el clic: tras esperar a la partida, el navegador podría no dejarlo sonar
+  if (!audio) {
+    try {
+      audio = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+      ganancia = audio.createGain();
+      ganancia.connect(audio.destination);
+      aplicarVolumen();
+      audio.resume();
+    } catch (e) { console.warn(e); }
+  }
+  if (!compartida()) {
+    partidaLocal = await leerPartida(juego.id);
+    if (!partidaLocal) {
+      primerMensaje = await elegirPartida('Este navegador aún no tiene partida de este juego. Elige la tuya: '
+        + 'desde ahora se guardará aquí y te seguirá a cualquier puesto.');
+      if (!primerMensaje) return;
+    }
+  }
+  $('entrar').style.display = 'none';
+  if (decodificador) { conectar(); return; }  // tras un rechazo, el sonido y el vídeo ya están listos
+  decodificador = crearDecodificador();
+  conectar();
+  lienzo.focus();
+}
+$('boton').addEventListener('click', entrar);
+function alCambiarPuesto() {
+  actualizarPuesto();
+  pintarSalas();
+  $('aviso').textContent = '';
+  // Ya dentro: cambiar de sala o de puesto es volver a entrar
+  if (decodificador && $('entrar').style.display === 'none') conectar();
+}
+selector.addEventListener('change', () => { alCambiarPuesto(); selector.blur(); });
+selSala.addEventListener('change', () => { rehacerPuestos(); alCambiarPuesto(); selSala.blur(); });
+selJuego.addEventListener('change', () => {
+  // Otro juego es otra sala: se sale de la actual y se vuelve a la pantalla de entrada
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  activarBarra(false);
+  estado.textContent = 'Sin conectar';
+  $('entrar').style.display = 'flex';
+  $('pausada').style.display = 'none';
+  $('aviso').textContent = '';
+  elegirJuego(selJuego.value);
+  consultarSalas();
+  selJuego.blur();
+});
+selConsolas.addEventListener('change', () => { rehacerPuestos(); actualizarPuesto(); selConsolas.blur(); });
+</script>
+</body>
+</html>
