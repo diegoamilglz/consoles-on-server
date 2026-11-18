@@ -1,77 +1,83 @@
-# Consolas en el servidor
+# Consoles on server
 
-Juegos de GBA y N64 que **corren en el servidor**: el navegador de cada jugador solo recibe vídeo y sonido, y manda sus teclas. Nadie tiene que tener el juego ni un emulador; quien monta el servidor pone el juego y los demás entran con un enlace.
+*English · [Español](README.es.md)*
 
-Sirve para lo que un emulador en el navegador no puede hacer:
+GBA and N64 games that **run on the server**: each player's browser only receives video and sound, and sends its key presses. Nobody needs the game or an emulator; whoever runs the server provides the game, and everyone else joins with a link.
 
-- **Cable link de GBA entre casas.** `gbalink` une de 2 a 4 GBA con el cable de mGBA en el mismo proceso, así que van en sincronía perfecta, sin netcode. Cada jugador ve su pantalla.
-- **Una consola compartida.** Juegos de dos en una sola GBA: todos ven la misma pantalla y las teclas de todos llegan a la consola.
-- **Juegos que necesitan un emulador exacto.** `lrlink` ejecuta un núcleo de libretro (probado con parallel-n64 y el dibujo exacto *angrylion*) en un servidor sin pantalla, para juegos que fallan con los emuladores ligeros del navegador.
+It covers what an in-browser emulator can't do:
 
-## Cómo funciona
+- **GBA link cable between homes.** `gbalink` connects 2 to 4 GBAs with mGBA's link cable inside one process, so they stay perfectly in sync with no netcode. Each player sees their own screen.
+- **One shared console.** Two-player games on a single GBA: everyone sees the same screen and everyone's keys reach the console.
+- **Games that need an accurate emulator.** `lrlink` runs a libretro core (tested with parallel-n64 and the accurate *angrylion* renderer) on a headless server, for games that break with the lightweight emulators in the browser.
+
+## How it works
 
 ```
-navegador ──WebSocket──> servidor.py ──tuberías──> gbalink / lrlink (las consolas)
-     <── vídeo H.264 (WebCodecs) y sonido PCM ──┘        └──> ffmpeg (x264)
+browser ──WebSocket──> servidor.py ──pipes──> gbalink / lrlink (the consoles)
+    <── H.264 video (WebCodecs) and PCM sound ──┘      └──> ffmpeg (x264)
 ```
 
-- `servidor.py` (Python, `websockets`) lleva las **salas**: arrancan cuando entra el primero y se apagan un minuto después de que salga el último. Limita las consolas encendidas a la vez (`--max-consolas`).
-- Cada consola manda sus fotogramas a `ffmpeg`, que los codifica en H.264 (`ultrafast`, `zerolatency`) para el navegador. El navegador los decodifica con WebCodecs en cuanto llegan, sin búfer.
-- Las **partidas** son de cada navegador: este guarda la suya (IndexedDB) y la manda al entrar. Cuando el juego guarda, el servidor devuelve el `.sav` nuevo a su dueño y guarda una copia.
-- La página (`gba-online.html`) trae pausa, velocidad x1 / x1,5 / x2 (de toda la sala), volumen, controles de teclado y mando editables, descargar y subir la partida, captura, pantalla completa e información de la conexión.
+- `servidor.py` (Python, `websockets`) manages the **rooms**: a room starts when the first player joins and shuts down one minute after the last one leaves. It caps how many consoles run at once (`--max-consolas`).
+- Each console sends its frames to `ffmpeg`, which encodes them as H.264 (`ultrafast`, `zerolatency`) for the browser. The browser decodes them with WebCodecs as soon as they arrive, with no buffering.
+- **Saves** belong to each browser: it keeps its own (IndexedDB) and sends it when joining. When the game saves, the server sends the new `.sav` back to its owner and keeps a copy.
+- The page (`gba-online.html`) has pause, x1 / x1.5 / x2 speed (for the whole room), volume, editable keyboard and gamepad controls, save download and upload, screenshot, fullscreen and connection info.
 
-Medido en un portátil con una AMD A6-5200 (4 núcleos, 2013):
+The code, its comments and the page are in Spanish.
 
-| | CPU | Datos por jugador |
+Measured on a laptop with an AMD A6-5200 (4 cores, 2013):
+
+| | CPU | Data per player |
 |---|---|---|
-| 2 GBA unidas | 0,75 núcleos | 330-700 kbit/s |
-| 4 GBA unidas | 1,4 núcleos | |
-| N64 con angrylion | ~2 núcleos (49-50 fps; baja en escenas muy cargadas) | |
+| 2 linked GBAs | 0.75 cores | 330-700 kbit/s |
+| 4 linked GBAs | 1.4 cores | |
+| N64 with angrylion | ~2 cores (49-50 fps; drops in very busy scenes) | |
 
-Probado entre dos casas a unos 30 km (21 ms de ping): sin retraso apreciable.
+Tested between two homes about 30 km apart (21 ms ping): no noticeable lag.
 
-## Requisitos
+**Tested games:** Pokémon Quetzal (a fan game based on Pokémon Emerald) works perfectly in 4-player co-op over the link cable, each player with their own save.
 
-- Linux con systemd (probado en Debian 13).
-- `python3`, `python3-websockets` (13 o más nueva) y `ffmpeg` con `libx264`.
-- Para compilar: `gcc`, `cmake`, `zlib1g-dev`.
+## Requirements
 
-## Compilar
+- Linux with systemd (tested on Debian 13).
+- `python3`, `python3-websockets` (13 or newer) and `ffmpeg` with `libx264`.
+- To build: `gcc`, `cmake`, `zlib1g-dev`.
 
-**GBA (`gbalink`)**, contra la libmgba de [mGBA](https://github.com/mgba-emu/mgba) 0.10.5 estática:
+## Building
+
+**GBA (`gbalink`)**, against a static libmgba from [mGBA](https://github.com/mgba-emu/mgba) 0.10.5:
 
 ```sh
-# en la carpeta de las fuentes de mGBA 0.10.5
+# in the mGBA 0.10.5 source folder
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DLIBMGBA_ONLY=ON -DBUILD_STATIC=ON -DBUILD_SHARED=OFF \
   -DM_CORE_GB=OFF -DUSE_EPOXY=OFF -DUSE_FFMPEG=OFF -DUSE_LIBZIP=OFF -DUSE_MINIZIP=OFF -DUSE_LZMA=OFF \
   -DUSE_SQLITE3=OFF -DUSE_ELF=OFF -DUSE_LUA=OFF -DUSE_JSON_C=OFF -DUSE_PNG=OFF -DENABLE_SCRIPTING=OFF
 cmake --build build -j"$(nproc)"
-# y aquí
-bash compilar.sh <carpeta de las fuentes de mGBA>
+# and here
+bash compilar.sh <mGBA source folder>
 ```
 
-`compilar-fs.sh` hace lo mismo contra mGBA 0.11 (por ejemplo, el fork [mgba-splitscreen](https://github.com/Spuds0588/mgba-splitscreen)) y da `gbalink-fs`. Es opcional y experimental.
+`compilar-fs.sh` does the same against mGBA 0.11 (for example, the [mgba-splitscreen](https://github.com/Spuds0588/mgba-splitscreen) fork) and produces `gbalink-fs`. It is optional and experimental.
 
-**N64 (`lrlink` y el núcleo parallel-n64)**, opcional:
+**N64 (`lrlink` and the parallel-n64 core)**, optional:
 
 ```sh
 bash compilar-n64.sh
 ```
 
-Baja parallel-n64 de GitHub y lo compila sin instalar nada en el sistema.
+It downloads parallel-n64 from GitHub and builds it without installing anything system-wide.
 
-## Instalar
+## Installing
 
-1. Pon tus juegos en una carpeta (de serie, `roms/` junto a este README) y apúntalos en `juegos-online.json` (ver abajo).
-2. `sudo bash instalar.sh [carpeta de las ROMs]`
+1. Put your games in a folder (by default `roms/`, next to this README) and list them in `juegos-online.json` (see below).
+2. `sudo bash instalar.sh [ROM folder]`
 
-Crea el usuario `gbalink` (sin contraseña ni shell) y el servicio `gba-link`, que escucha en `127.0.0.1:9081`. El servicio solo puede escribir en `/var/lib/gba-link` y no puede salir a internet.
+It creates the `gbalink` user (no password, no shell) and the `gba-link` service, listening on `127.0.0.1:9081`. The service can only write to `/var/lib/gba-link` and cannot reach the internet.
 
-Para probarlo sin instalar nada: `python3 servidor.py --roms <carpeta> --datos <carpeta de partidas>` (con `gbalink` y `juegos-online.json` junto a él) y abre `http://localhost:9081/`.
+To try it without installing: `python3 servidor.py --roms <folder> --datos <saves folder>` (with `gbalink` and `juegos-online.json` next to it), then open `http://localhost:9081/`.
 
-### Publicarlo
+### Publishing it
 
-Detrás de un proxy con HTTPS, en la ruta que quieras. Con Apache (`proxy`, `proxy_http` y `proxy_wstunnel`):
+Behind an HTTPS proxy, at any path. With Apache (`proxy`, `proxy_http` and `proxy_wstunnel`):
 
 ```apache
 ProxyPass        /online/ws ws://127.0.0.1:9081/ws
@@ -79,35 +85,35 @@ ProxyPass        /online/   http://127.0.0.1:9081/
 ProxyPassReverse /online/   http://127.0.0.1:9081/
 ```
 
-El servicio no tiene usuarios: pon una contraseña delante (por ejemplo, autenticación básica en esa ruta).
+The service has no user accounts: put a password in front of it (for example, basic auth on that path).
 
-## La lista de juegos (`juegos-online.json`)
+## The game list (`juegos-online.json`)
 
-| Campo | Qué es |
+| Field | Meaning |
 |---|---|
-| `id`, `nombre` | Identificador (en la URL: `?juego=<id>`) y nombre visible. |
-| `origen` | Fichero de la ROM, relativo a la carpeta que se pasa a `instalar.sh`. |
-| `rom` | Nombre con que se copia a `/var/lib/gba-link`. |
-| `modo` | `cable` (una consola por jugador) o `compartida` (una para todos). |
-| `consolas` | Con `cable`: cuántas consolas se pueden elegir, por ejemplo `[2, 3, 4]`. |
-| `jugadores` | Con `compartida`: cuántos jugadores. |
-| `salas` | Cuántas salas tiene el juego. |
-| `partida_bytes` | Tamaño de la partida, para rellenar las que se suben más pequeñas. |
-| `descripcion`, `ayuda` | Textos de la página. |
-| `binario` | Programa de la consola: `gbalink` (de serie), `gbalink-fs` o `lrlink`. |
-| `sistema`, `nucleo`, `opciones` | Para `lrlink`: `n64`, el núcleo de libretro y sus opciones (`clave=valor;…`). |
-| `peso` | Cuántas consolas de `--max-consolas` cuenta (una N64 con angrylion, 4). |
-| `video`, `audio_hz` | Tamaño, fps y frecuencia de sonido, si no son los de la GBA. |
-| `en_lista` | Opcional: el juego no sale en el selector, solo si se entra con su `?juego=`. |
+| `id`, `nombre` | Identifier (in the URL: `?juego=<id>`) and display name. |
+| `origen` | ROM file, relative to the folder passed to `instalar.sh`. |
+| `rom` | Name it is copied as into `/var/lib/gba-link`. |
+| `modo` | `cable` (one console per player) or `compartida` (one shared console). |
+| `consolas` | With `cable`: how many consoles can be chosen, e.g. `[2, 3, 4]`. |
+| `jugadores` | With `compartida`: how many players. |
+| `salas` | How many rooms the game has. |
+| `partida_bytes` | Save size, used to pad smaller uploaded saves. |
+| `descripcion`, `ayuda` | Texts shown on the page. |
+| `binario` | Console program: `gbalink` (default), `gbalink-fs` or `lrlink`. |
+| `sistema`, `nucleo`, `opciones` | For `lrlink`: `n64`, the libretro core and its options (`key=value;…`). |
+| `peso` | How many of `--max-consolas` it counts as (an N64 with angrylion: 4). |
+| `video`, `audio_hz` | Size, fps and sound rate, if not the GBA ones. |
+| `en_lista` | Optional: the game is not listed in the selector, only reachable with its `?juego=`. |
 
-Un juego cuya ROM o cuyo programa no está no aparece.
+A game whose ROM or program is missing doesn't show up.
 
-## Notas
+## Notes
 
-- **Las ROMs y BIOS no van en este repositorio.** Usa juegos que tengas o homebrew.
-- Con varias GBA unidas no hay estados guardados: romperían la sincronía del cable. Las partidas son las del propio juego.
-- `lrlink` usa la gráfica (EGL/GBM sin escritorio) si puede abrirla, y si no, deja que el núcleo dibuje en memoria (angrylion no necesita gráfica). El servicio, de serie, no tiene acceso a `/dev/dri`.
+- **ROMs and BIOS files are not part of this repository.** Use games you own or homebrew.
+- With linked GBAs there are no save states: they would break the link cable sync. Saves are the game's own.
+- `lrlink` uses the GPU (EGL/GBM, no desktop needed) if it can open it; otherwise it lets the core render in memory (angrylion doesn't need a GPU). By default the service has no access to `/dev/dri`.
 
-## Licencia
+## License
 
-GPL-3.0 (ver `LICENSE`). `gbalink` se enlaza con libmgba ([MPL-2.0](https://github.com/mgba-emu/mgba/blob/master/LICENSE)), y `lrlink` carga núcleos de libretro con su propia licencia (parallel-n64: GPL-2.0).
+GPL-3.0 (see `LICENSE`). `gbalink` links against libmgba ([MPL-2.0](https://github.com/mgba-emu/mgba/blob/master/LICENSE)), and `lrlink` loads libretro cores under their own licenses (parallel-n64: GPL-2.0).
